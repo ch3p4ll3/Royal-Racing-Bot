@@ -1,0 +1,13 @@
+CREATE TABLE bot_users(
+    tg_id VARCHAR(10) NOT NULL PRIMARY KEY,
+    tg_name VARCHAR(255),
+    notify_events BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE bot_event_sended(
+    bot_event_sended INT NOT NULL PRIMARY KEY AUTO_INCREMENT,
+    user VARCHAR(10) NOT NULL,
+    FOREIGN KEY (user) REFERENCES bot_users(tg_id) ON UPDATE RESTRICT ON DELETE RESTRICT,
+    event INT NOT NULL,
+    FOREIGN KEY (event) REFERENCES events(id_event) ON UPDATE RESTRICT ON DELETE RESTRICT
+);
