@@ -270,5 +270,5 @@ eventi_nuovi.start()
 
 
 @app.on_disconnect()
-async def stop_spammer():
+async def stop_spammer(client: Client):
     await eventi_nuovi.stop()
