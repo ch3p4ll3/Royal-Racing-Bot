@@ -79,7 +79,7 @@ def change_notify(client: Client, callback_query: CallbackQuery):
         db.execute(f"UPDATE bot_users SET notify_events = !notify_events "
                    f"WHERE tg_id={callback_query.from_user.id};")
 
-    settings_callback(callback_query)
+    settings_callback(client, callback_query)
 
 
 @app.on_callback_query(filters=filters.regex("impostazioni"))
