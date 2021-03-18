@@ -306,7 +306,7 @@ Y88888P
 88    88 
 `8b  d8' 
  `Y88P'  
- """)
+ """, parse_mode=None)
 
     except UserIsBlocked:
         remove_user(message.from_user.id)
