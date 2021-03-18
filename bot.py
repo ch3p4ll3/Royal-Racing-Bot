@@ -259,7 +259,74 @@ def evento_callback(client: Client, callback_query: CallbackQuery):
 @app.on_message(filters=filters.regex(r"(?i)trello"))
 def trello_easter_egg(client: Client, message: Message):
     try:
-        message.reply_text("**T R E L L O**")
+        message.reply_text("""
+ /$$$$$$$$
+|__  $$__/
+   | $$   
+   | $$   
+   | $$   
+   | $$   
+   | $$   
+   |__/   
+          
+          
+          
+ /$$$$$$$ 
+| $$__  $$
+| $$  \ $$
+| $$$$$$$/
+| $$__  $$
+| $$  \ $$
+| $$  | $$
+|__/  |__/
+          
+          
+          
+ /$$$$$$$$
+| $$_____/
+| $$      
+| $$$$$   
+| $$__/   
+| $$      
+| $$$$$$$$
+|________/
+          
+          
+          
+ /$$      
+| $$      
+| $$      
+| $$      
+| $$      
+| $$      
+| $$$$$$$$
+|________/
+          
+          
+          
+ /$$      
+| $$      
+| $$      
+| $$      
+| $$      
+| $$      
+| $$$$$$$$
+|________/
+          
+          
+          
+  /$$$$$$ 
+ /$$__  $$
+| $$  \ $$
+| $$  | $$
+| $$  | $$
+| $$  | $$
+|  $$$$$$/
+ \______/ 
+          
+          
+          
+""")
 
     except UserIsBlocked:
         remove_user(message.from_user.id)
