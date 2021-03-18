@@ -259,13 +259,14 @@ def evento_callback(client: Client, callback_query: CallbackQuery):
 @app.on_message(filters=filters.regex(r"(?i)trello"))
 def trello_easter_egg(client: Client, message: Message):
     try:
-        message.reply_text("""
+        message.reply_text(
+"""
 d888888b 
 `~~88~~' 
-   88    
-   88    
-   88    
-   YP    
+      88    
+      88    
+      88    
+      YP    
          
          
 d8888b.  
@@ -300,11 +301,11 @@ db
 Y88888P  
          
          
- .d88b.  
-.8P  Y8. 
-88    88 
-88    88 
-`8b  d8' 
+  .d88b.  
+ .8P  Y8. 
+ 88    88 
+ 88    88
+`8b  d8'
  `Y88P'  
  """, parse_mode=None)
 
