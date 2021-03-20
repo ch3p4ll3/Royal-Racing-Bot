@@ -1,7 +1,7 @@
 async-lru==1.0.2
 certifi==2020.12.5
 chardet==4.0.0
-idna==2.10
+idna==3.1
 Logbook==1.5.3
 pony==0.7.14
 pyaes==1.6.1
@@ -10,4 +10,4 @@ Pyrogram==1.1.13
 PySocks==1.7.1
 requests==2.25.1
 TgCrypto==1.2.2
-urllib3==1.26.3
+urllib3==1.26.4

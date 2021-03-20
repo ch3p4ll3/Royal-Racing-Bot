@@ -1,4 +1,4 @@
-from os import getenv
+from datetime import datetime
 
 from pony.orm import Database, db_session
 from pyrogram import Client, filters
@@ -7,7 +7,7 @@ from pyrogram.types import InlineKeyboardMarkup, \
     InlineKeyboardButton, CallbackQuery, Message
 
 from config import BASE_URL, DB_DB, DB_PSW, DB_USER, \
-    DB_HOST, SESSION_STRING, API_HASH, API_ID
+    DB_HOST, SESSION_STRING, API_HASH, API_ID, TG_KEY
 from spammer import Spammer
 
 db = Database()
@@ -16,7 +16,7 @@ app = Client(
     SESSION_STRING,
     api_hash=API_HASH,
     api_id=API_ID,
-    bot_token=getenv("TG-KEY"),
+    bot_token=TG_KEY,
     parse_mode="markdown"
 )
 
@@ -27,6 +27,9 @@ db.bind(
     passwd=DB_PSW,
     db=DB_DB
 )
+
+eventi_nuovi = Spammer(app, db)
+eventi_nuovi.start()
 
 
 def add_user(user_id, name):
@@ -166,6 +169,30 @@ def dettagli_evento(client: Client, callback_query: CallbackQuery):
              start_date, event_type, image_url,
              drivers, subs) in db.execute(query):
 
+            cars = ""
+            tracks = ""
+
+            with db_session:
+                for car_name in db.select(
+                        f"SELECT car_name FROM cars_in_events "
+                        f"INNER JOIN cars ON car=id_car "
+                        f"WHERE event={id_event};"):
+                    cars += f"• {car_name}"
+
+            with db_session:
+                for track_name, date in db.select(
+                        f"SELECT track_name, "
+                        f"date FROM calendars "
+                        f"INNER JOIN tracks "
+                        f"ON track=id_track "
+                        f"WHERE event={id_event};"
+                ):
+
+                    if date < datetime.now():
+                        tracks += f"~~• {track_name} - {date}~~\n"
+                    else:
+                        tracks += f"• {track_name} - {date}\n"
+
             btn = InlineKeyboardMarkup([
                 [
                     InlineKeyboardButton(
@@ -179,9 +206,11 @@ def dettagli_evento(client: Client, callback_query: CallbackQuery):
             ])
 
             text = f"**{event_name}**\n\n{description}\n" \
-                   f"Data di inizio: {start_date}" \
+                   f"\nData di inizio: {start_date}" \
                    f"\nTipologia di evento: {event_type}" \
-                   f"\nNumero di posti: {subs}/{drivers}"
+                   f"\nNumero di posti: {subs}/{drivers}\n" \
+                   f"\nAuto:\n{cars}\n\n" \
+                   f"Tracciati: \n{tracks}"
 
             try:
                 if image_url is not None:
@@ -311,12 +340,3 @@ Y88888P
 
     except UserIsBlocked:
         remove_user(message.from_user.id)
-
-
-eventi_nuovi = Spammer(app, db)
-eventi_nuovi.start()
-
-
-@app.on_disconnect()
-async def stop_spammer(client: Client):
-    await eventi_nuovi.stop()

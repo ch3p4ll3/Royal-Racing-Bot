@@ -1,5 +1,6 @@
 import threading
 import time
+from datetime import datetime
 
 from pony.orm import db_session, Database
 from pyrogram import Client
@@ -20,7 +21,7 @@ class Spammer(threading.Thread):
     def run(self):
         timer = time.time()
         while self.go:
-            if time.time() - timer >= 10:
+            if time.time() - timer >= 3600:
                 self.spammer()
                 timer = time.time()
 
@@ -49,15 +50,39 @@ class Spammer(threading.Thread):
                         f"start_date, event_type.type, image_url, drivers " \
                         f"FROM events INNER JOIN event_type ON " \
                         f"event_type.id_type=events.type " \
-                        f"WHERE DATE(creation_date) = CURDATE() AND " \
+                        f"WHERE DATE(creation_date) > CURDATE() AND " \
                         f"(SELECT notify_events FROM bot_users " \
                         f"WHERE tg_id={user} LIMIT 1) IS TRUE AND " \
                         f"id_event NOT IN (SELECT event FROM " \
                         f"bot_event_sended WHERE user={user});"
 
                 for (id_event, event_name, description,
-                     start_date, type, image_url, drivers) \
+                     start_date, event_type, image_url, drivers) \
                         in self.db.select(query):
+
+                    cars = ""
+                    tracks = ""
+
+                    with db_session:
+                        for car_name in self.db.select(
+                                f"SELECT car_name FROM cars_in_events "
+                                f"INNER JOIN cars ON car=id_car "
+                                f"WHERE event={id_event};"):
+                            cars += f"• {car_name}"
+
+                    with db_session:
+                        for track_name, date in self.db.select(
+                                f"SELECT track_name, "
+                                f"date FROM calendars "
+                                f"INNER JOIN tracks "
+                                f"ON track=id_track "
+                                f"WHERE event={id_event};"
+                        ):
+
+                            if date < datetime.now():
+                                tracks += f"~~• {track_name} - {date}~~\n"
+                            else:
+                                tracks += f"• {track_name} - {date}\n"
 
                     btn = InlineKeyboardMarkup(
                         [
@@ -70,15 +95,17 @@ class Spammer(threading.Thread):
                         ]
                     )
 
-                    text = f"**{event_name}**\n\n{description}\n\n" \
-                           f"Data di inizio: {start_date}" \
-                           f"\nTipologia di evento: {type}" \
-                           f"\nNumero di posti: {drivers}"
+                    text = f"**{event_name}**\n\n{description}\n" \
+                           f"\nData di inizio: {start_date}" \
+                           f"\nTipologia di evento: {event_type}" \
+                           f"\nNumero di posti: {drivers}\n" \
+                           f"\nAuto:\n{cars}\n\n" \
+                           f"Tracciati: \n{tracks}"
 
                     try:
                         if image_url is not None:
                             self.app.send_photo(
-                                user,
+                                int(user),
                                 photo=image_url,
                                 caption=text,
                                 reply_markup=btn
@@ -86,7 +113,7 @@ class Spammer(threading.Thread):
 
                         else:
                             self.app.send_message(
-                                user,
+                                int(user),
                                 text,
                                 reply_markup=btn
                             )
@@ -95,7 +122,7 @@ class Spammer(threading.Thread):
                                         F"VALUES(NULL, {user}, {id_event})")
 
                     except UserIsBlocked:
-                        self.remove_user(user)
+                        self.remove_user(int(user))
 
     def stop(self):
         self.go = False
