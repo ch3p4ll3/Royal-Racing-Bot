@@ -1,16 +1,13 @@
 from datetime import datetime
+from db_manager import select, insert, update, delete
 
-from pony.orm import Database, db_session
 from pyrogram import Client, filters
 from pyrogram.errors.exceptions.bad_request_400 import UserIsBlocked
 from pyrogram.types import InlineKeyboardMarkup, \
     InlineKeyboardButton, CallbackQuery, Message
 
-from config import BASE_URL, DB_DB, DB_PSW, DB_USER, \
-    DB_HOST, SESSION_STRING, API_HASH, API_ID, TG_KEY
+from config import BASE_URL, SESSION_STRING, API_HASH, API_ID, TG_KEY
 from spammer import Spammer
-
-db = Database()
 
 app = Client(
     SESSION_STRING,
@@ -20,33 +17,23 @@ app = Client(
     parse_mode="markdown"
 )
 
-db.bind(
-    provider='mysql',
-    host=DB_HOST,
-    user=DB_USER,
-    passwd=DB_PSW,
-    db=DB_DB
-)
-
-eventi_nuovi = Spammer(app, db)
+eventi_nuovi = Spammer(app)
 eventi_nuovi.start()
 
 
 def add_user(user_id, name):
     try:
-        with db_session:
-            db.execute(f"INSERT IGNORE INTO bot_users(tg_id, tg_name) "
-                       f"VALUES('{user_id}', '{name}');")
+        insert("INSERT IGNORE INTO bot_users(tg_id, tg_name)"
+               " VALUES(%s, %s);", (user_id, name,))
     except Exception as e:
         print(e)
 
 
 def remove_user(user_id):
     try:
-        with db_session:
-            db.execute(f"DELETE FROM bot_event_sended WHERE user = {user_id}")
+        delete("DELETE FROM bot_event_sended WHERE user = %s", (user_id,))
 
-            db.execute(f"DELETE FROM bot_users WHERE tg_id = {user_id}")
+        delete("DELETE FROM bot_users WHERE tg_id = %s", (user_id,))
     except Exception:
         pass
 
@@ -78,20 +65,20 @@ def start_command(client: Client, message: Message):
 
 @app.on_callback_query(filters=filters.regex("change_notify"))
 def change_notify(client: Client, callback_query: CallbackQuery):
-    with db_session:
-        db.execute(f"UPDATE bot_users SET notify_events = !notify_events "
-                   f"WHERE tg_id={callback_query.from_user.id};")
+    update("UPDATE bot_users SET notify_events = !notify_events "
+           "WHERE tg_id = %s;", (callback_query.from_user.id,))
 
     settings_callback(client, callback_query)
 
 
 @app.on_callback_query(filters=filters.regex("impostazioni"))
 def settings_callback(client: Client, callback_query: CallbackQuery):
-    with db_session:
-        notify = db.select(f"SELECT notify_events FROM bot_users "
-                           f"WHERE tg_id = {callback_query.from_user.id}")[0]
+    result = select("SELECT notify_events "
+                    "FROM bot_users WHERE "
+                    "tg_id = %s;", (callback_query.from_user.id,))
+    notify = list(next(result))[0]
 
-    txt = " attivata"
+    txt = "attivata"
     txt = "disattivata" if not notify else txt
 
     btn = InlineKeyboardMarkup([
@@ -156,81 +143,78 @@ def home_callback(client: Client, callback_query: CallbackQuery):
 @app.on_callback_query(filters=filters.regex("dettagliEvento"))
 def dettagli_evento(client: Client, callback_query: CallbackQuery):
     event_id = callback_query.data.split("#")[1]
-    query = f"SELECT id_event, event_name, descrizione, start_date, " \
-            f"event_type.type, image_url, drivers, COUNT(driver) AS 'subs'" \
-            f"FROM events INNER JOIN event_type ON " \
-            f"event_type.id_type=events.type " \
-            f"INNER JOIN users_with_teams ON " \
-            f"events.id_event = users_with_teams.event " \
-            f"WHERE id_event = {event_id}"
+    query = "SELECT id_event, event_name, descrizione, start_date, " \
+            "event_type.type, image_url, drivers, COUNT(driver) AS 'subs'" \
+            "FROM events INNER JOIN event_type ON " \
+            "event_type.id_type=events.type " \
+            "INNER JOIN users_with_teams ON " \
+            "events.id_event = users_with_teams.event " \
+            "WHERE id_event = %s"
 
-    with db_session:
-        for (id_event, event_name, description,
-             start_date, event_type, image_url,
-             drivers, subs) in db.execute(query):
+    for (id_event, event_name, description,
+         start_date, event_type, image_url,
+         drivers, subs) in select(query, (event_id,)):
 
-            cars = ""
-            tracks = ""
+        cars = ""
+        tracks = ""
 
-            with db_session:
-                for car_name in db.select(
-                        f"SELECT car_name FROM cars_in_events "
-                        f"INNER JOIN cars ON car=id_car "
-                        f"WHERE event={id_event};"):
-                    cars += f"• {car_name}"
+        for car_name in select("SELECT car_name FROM "
+                               "cars_in_events INNER "
+                               "JOIN cars ON car=id_car "
+                               "WHERE event=%s;", (id_event,)):
+            cars += f"• {car_name}"
 
-            with db_session:
-                for track_name, date in db.select(
-                        f"SELECT track_name, "
-                        f"date FROM calendars "
-                        f"INNER JOIN tracks "
-                        f"ON track=id_track "
-                        f"WHERE event={id_event};"
-                ):
+        for track_name, date in select(
+                "SELECT track_name, "
+                "date FROM calendars "
+                "INNER JOIN tracks "
+                "ON track=id_track "
+                "WHERE event=%s;", (id_event,)
+        ):
 
-                    if date < datetime.now():
-                        tracks += f"~~• {track_name} - {date}~~\n"
-                    else:
-                        tracks += f"• {track_name} - {date}\n"
+            if date < datetime.now():
+                tracks += f"~~• {track_name} - {date}~~\n"
+            else:
+                tracks += f"• {track_name} - {date}\n"
 
-            btn = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton(
-                        event_name,
-                        url=f"{BASE_URL}/event-detail/{id_event}"
-                    )
-                ],
-                [
-                    InlineKeyboardButton("Back", "home")
-                ]
-            ])
+        btn = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    event_name,
+                    url=f"{BASE_URL}/event-detail/{id_event}"
+                )
+            ],
+            [
+                InlineKeyboardButton("Back", "home")
+            ]
+        ])
 
-            text = f"**{event_name}**\n\n{description}\n" \
-                   f"\nData di inizio: {start_date}" \
-                   f"\nTipologia di evento: {event_type}" \
-                   f"\nNumero di posti: {subs}/{drivers}\n" \
-                   f"\nAuto:\n{cars}\n\n" \
-                   f"Tracciati: \n{tracks}"
+        text = f"**{event_name}**\n\n{description}\n" \
+               f"\nData di inizio: {start_date}" \
+               f"\nTipologia di evento: {event_type}" \
+               f"\nNumero di posti: {subs}/{drivers}\n" \
+               f"\nAuto:\n{cars}\n\n" \
+               f"Tracciati: \n{tracks}"
 
-            try:
-                if image_url is not None:
-                    app.send_photo(
-                        callback_query.from_user.id,
-                        photo=image_url,
-                        caption=text,
-                        reply_markup=btn
-                    )
+        try:
+            if image_url is not None:
+                app.send_photo(
+                    callback_query.from_user.id,
+                    photo=image_url,
+                    caption=text,
+                    reply_markup=btn
+                )
 
-                else:
-                    app.edit_message_text(
-                        callback_query.from_user.id,
-                        callback_query.message.message_id,
-                        text=text,
-                        reply_markup=btn
-                    )
+            else:
+                app.edit_message_text(
+                    callback_query.from_user.id,
+                    callback_query.message.message_id,
+                    text=text,
+                    reply_markup=btn
+                )
 
-            except UserIsBlocked:
-                remove_user(callback_query.from_user.id)
+        except UserIsBlocked:
+            remove_user(callback_query.from_user.id)
 
 
 @app.on_callback_query(filters=filters.regex("evento"))
@@ -239,38 +223,35 @@ def evento_callback(client: Client, callback_query: CallbackQuery):
     btns = []
 
     if choice == "1":
-        with db_session:
-            query = "SELECT event_name, id_event" \
-                    " FROM events WHERE CURDATE() > start_date"
+        query = "SELECT event_name, id_event" \
+                " FROM events WHERE CURDATE() > start_date"
 
-            for i, j in db.execute(query):
-                btns.append([InlineKeyboardButton(
-                    i,
-                    callback_data=f"dettagliEvento#{j}"
-                )])
+        for i, j in select(query):
+            btns.append([InlineKeyboardButton(
+                i,
+                callback_data=f"dettagliEvento#{j}"
+            )])
 
     elif choice == "2":
-        with db_session:
-            query = "SELECT event_name, id_event " \
-                    "FROM events WHERE CURDATE() < finish_date"
+        query = "SELECT event_name, id_event " \
+                "FROM events WHERE CURDATE() < finish_date"
 
-            for i, j in db.execute(query):
-                btns.append([InlineKeyboardButton(
-                    i,
-                    callback_data=f"dettagliEvento#{j}"
-                )])
+        for i, j in select(query):
+            btns.append([InlineKeyboardButton(
+                i,
+                callback_data=f"dettagliEvento#{j}"
+            )])
 
     else:
-        with db_session:
-            query = "SELECT event_name, id_event " \
-                    "FROM events WHERE CURDATE() " \
-                    "BETWEEN start_date AND finish_date"
+        query = "SELECT event_name, id_event " \
+                "FROM events WHERE CURDATE() " \
+                "BETWEEN start_date AND finish_date"
 
-            for i, j in db.execute(query):
-                btns.append([InlineKeyboardButton(
-                    i,
-                    callback_data=f"dettagliEvento#{j}"
-                )])
+        for i, j in select(query):
+            btns.append([InlineKeyboardButton(
+                i,
+                callback_data=f"dettagliEvento#{j}"
+            )])
 
     btns.append([InlineKeyboardButton("Back", "home")])
 
@@ -289,53 +270,43 @@ def evento_callback(client: Client, callback_query: CallbackQuery):
 def trello_easter_egg(client: Client, message: Message):
     try:
         message.reply_text(
-"""
-d888888b 
-`~~88~~' 
-      88    
-      88    
-      88    
-      YP    
-         
-         
-d8888b.  
-88  `8D  
-88oobY'  
+            """
+d888888b
+`~~88~~'
+      88
+      88
+      88
+      YP\n\n 
+d8888b.
+88  `8D
+88oobY'
 88`8b    
 88 `88.  
-88   YD  
-         
-         
+88   YD\n\n 
 d88888b  
 88'      
 88ooooo  
 88~~~~~  
 88.      
-Y88888P  
-         
-         
+Y88888P\n\n     
 db       
 88       
 88       
 88       
 88booo.  
-Y88888P  
-         
-         
+Y88888P\n\n
 db       
 88       
 88       
 88       
 88booo.  
-Y88888P  
-         
-         
+Y88888P\n\n 
   .d88b.  
  .8P  Y8. 
  88    88 
  88    88
 `8b  d8'
- `Y88P'  
+ `Y88P'
  """, parse_mode=None)
 
     except UserIsBlocked:

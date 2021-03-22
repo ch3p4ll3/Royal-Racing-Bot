@@ -2,26 +2,25 @@ import threading
 import time
 from datetime import datetime
 
-from pony.orm import db_session, Database
 from pyrogram import Client
 from pyrogram.errors.exceptions.bad_request_400 import UserIsBlocked
 from pyrogram.types import InlineKeyboardMarkup, \
     InlineKeyboardButton
 
 from config import BASE_URL
+from db_manager import select, delete, insert
 
 
 class Spammer(threading.Thread):
-    def __init__(self, app: Client, db: Database):
+    def __init__(self, app: Client):
         threading.Thread.__init__(self)
         self.app = app
-        self.db = db
         self.go = True
 
     def run(self):
         timer = time.time()
         while self.go:
-            if time.time() - timer >= 3600:
+            if time.time() - timer >= 10:
                 self.spammer()
                 timer = time.time()
 
@@ -31,98 +30,94 @@ class Spammer(threading.Thread):
 
     def remove_user(self, user_id):
         try:
-            with db_session:
-                self.db.execute(f"DELETE FROM bot_event_sended"
-                                f" WHERE user = {user_id}")
+            delete("DELETE FROM bot_event_sended"
+                   " WHERE user = %s", (user_id,))
 
-                self.db.execute(f"DELETE FROM bot_users WHERE "
-                                f"tg_id = {user_id}")
+            delete("DELETE FROM bot_users "
+                   "WHERE tg_id = %s", (user_id,))
         except Exception:
             pass
 
     def spammer(self):
-        with db_session:
-            users = self.db.select("SELECT tg_id FROM bot_users")
+        users = select("SELECT tg_id FROM bot_users")
 
-            for user in users:
+        for user in users:
+            user = list(user)[0]
 
-                query = f"SELECT id_event, event_name, descrizione, " \
-                        f"start_date, event_type.type, image_url, drivers " \
-                        f"FROM events INNER JOIN event_type ON " \
-                        f"event_type.id_type=events.type " \
-                        f"WHERE DATE(creation_date) > CURDATE() AND " \
-                        f"(SELECT notify_events FROM bot_users " \
-                        f"WHERE tg_id={user} LIMIT 1) IS TRUE AND " \
-                        f"id_event NOT IN (SELECT event FROM " \
-                        f"bot_event_sended WHERE user={user});"
+            query = "SELECT id_event, event_name, descrizione, " \
+                    "start_date, event_type.type, image_url, drivers " \
+                    "FROM events INNER JOIN event_type ON " \
+                    "event_type.id_type=events.type " \
+                    "WHERE DATE(creation_date) > CURDATE() AND " \
+                    "(SELECT notify_events FROM bot_users " \
+                    "WHERE tg_id=%s LIMIT 1) IS TRUE AND " \
+                    "id_event NOT IN (SELECT event FROM " \
+                    "bot_event_sended WHERE user=%s);"
 
-                for (id_event, event_name, description,
-                     start_date, event_type, image_url, drivers) \
-                        in self.db.select(query):
+            for (id_event, event_name, description,
+                 start_date, event_type, image_url,
+                 drivers) in select(query, (user, user)):
 
-                    cars = ""
-                    tracks = ""
+                cars = ""
+                tracks = ""
 
-                    with db_session:
-                        for car_name in self.db.select(
-                                f"SELECT car_name FROM cars_in_events "
-                                f"INNER JOIN cars ON car=id_car "
-                                f"WHERE event={id_event};"):
-                            cars += f"• {car_name}"
+                for car_name in select("SELECT car_name FROM cars_in_events "
+                                       "INNER JOIN cars ON car=id_car "
+                                       "WHERE event=%s;", (id_event,)):
+                    cars += f"• {list(car_name)[0]}"
 
-                    with db_session:
-                        for track_name, date in self.db.select(
-                                f"SELECT track_name, "
-                                f"date FROM calendars "
-                                f"INNER JOIN tracks "
-                                f"ON track=id_track "
-                                f"WHERE event={id_event};"
-                        ):
+                for track_name, date in select(
+                        "SELECT track_name, "
+                        "date FROM calendars "
+                        "INNER JOIN tracks "
+                        "ON track=id_track "
+                        "WHERE event=%s;", (id_event,)
+                ):
 
-                            if date < datetime.now():
-                                tracks += f"~~• {track_name} - {date}~~\n"
-                            else:
-                                tracks += f"• {track_name} - {date}\n"
+                    if date < datetime.now():
+                        tracks += f"~~• {track_name} - {date}~~\n"
+                    else:
+                        tracks += f"• {track_name} - {date}\n"
 
-                    btn = InlineKeyboardMarkup(
+                btn = InlineKeyboardMarkup(
+                    [
                         [
-                            [
-                                InlineKeyboardButton(
-                                    event_name,
-                                    url=f"{BASE_URL}/event-detail/{id_event}"
-                                )
-                            ]
+                            InlineKeyboardButton(
+                                event_name,
+                                url=f"{BASE_URL}/event-detail/{id_event}"
+                            )
                         ]
-                    )
+                    ]
+                )
 
-                    text = f"**{event_name}**\n\n{description}\n" \
-                           f"\nData di inizio: {start_date}" \
-                           f"\nTipologia di evento: {event_type}" \
-                           f"\nNumero di posti: {drivers}\n" \
-                           f"\nAuto:\n{cars}\n\n" \
-                           f"Tracciati: \n{tracks}"
+                text = f"**{event_name}**\n\n{description}\n" \
+                       f"\nData di inizio: {start_date}" \
+                       f"\nTipologia di evento: {event_type}" \
+                       f"\nNumero di posti: {drivers}\n" \
+                       f"\nAuto:\n{cars}\n\n" \
+                       f"Tracciati: \n{tracks}"
 
-                    try:
-                        if image_url is not None:
-                            self.app.send_photo(
-                                int(user),
-                                photo=image_url,
-                                caption=text,
-                                reply_markup=btn
-                            )
+                try:
+                    if image_url is not None:
+                        self.app.send_photo(
+                            int(user),
+                            photo=image_url,
+                            caption=text,
+                            reply_markup=btn
+                        )
 
-                        else:
-                            self.app.send_message(
-                                int(user),
-                                text,
-                                reply_markup=btn
-                            )
+                    else:
+                        self.app.send_message(
+                            int(user),
+                            text,
+                            reply_markup=btn
+                        )
 
-                        self.db.execute(F"INSERT INTO bot_event_sended "
-                                        F"VALUES(NULL, {user}, {id_event})")
+                    insert("INSERT INTO bot_event_sended "
+                           "VALUES(NULL, %s, %s)", (user, id_event,))
 
-                    except UserIsBlocked:
-                        self.remove_user(int(user))
+                except UserIsBlocked:
+                    self.remove_user(user)
 
     def stop(self):
         self.go = False
