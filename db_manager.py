@@ -25,16 +25,6 @@ def select(query, values=None):
 
     for i in cursor.fetchall():
         yield i.values()
-    """results = []
-    for i in cursor.fetchall():
-        if values is None:
-            for j in i:
-                results.append(j)
-            yield results
-        else:
-            for j in i:
-                results.append(i.get(j))
-            yield results"""
 
     disconnect(cursor, bd_connection)
 

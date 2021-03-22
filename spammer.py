@@ -11,7 +11,20 @@ from config import BASE_URL
 from db_manager import select, delete, insert
 
 
+def remove_user(user_id):
+    try:
+        delete("DELETE FROM bot_event_sended"
+               " WHERE user = %s", (user_id,))
+
+        delete("DELETE FROM bot_users "
+               "WHERE tg_id = %s", (user_id,))
+    except Exception:
+        pass
+
+
 class Spammer(threading.Thread):
+    """spammer class, with this you
+    can stay updated with new events"""
     def __init__(self, app: Client):
         threading.Thread.__init__(self)
         self.app = app
@@ -27,16 +40,6 @@ class Spammer(threading.Thread):
             if not self.go:
                 break
             time.sleep(1)
-
-    def remove_user(self, user_id):
-        try:
-            delete("DELETE FROM bot_event_sended"
-                   " WHERE user = %s", (user_id,))
-
-            delete("DELETE FROM bot_users "
-                   "WHERE tg_id = %s", (user_id,))
-        except Exception:
-            pass
 
     def spammer(self):
         users = select("SELECT tg_id FROM bot_users")
@@ -117,7 +120,7 @@ class Spammer(threading.Thread):
                            "VALUES(NULL, %s, %s)", (user, id_event,))
 
                 except UserIsBlocked:
-                    self.remove_user(user)
+                    remove_user(user)
 
     def stop(self):
         self.go = False
