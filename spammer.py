@@ -23,6 +23,7 @@ def remove_user(user_id):
 
 
 class Spammer(threading.Thread):
+
     """spammer class, with this you
     can stay updated with new events"""
     def __init__(self, app: Client):
